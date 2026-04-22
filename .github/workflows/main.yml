@@ -48,6 +48,8 @@ jobs:
             --features=-layering_check \
             --features=-module_maps \
             --cxxopt='-std=c++23' \
+            --define=workerd_use_python_bundle=false \
+            --@pyodide//:enabled=false \
             -c opt
 
       - name: Upload binary
