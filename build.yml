@@ -1,0 +1,57 @@
+name: Build workerd for Pi4
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git curl zip unzip python3 tcl clang libc++-dev libc++abi-dev
+
+      - name: Install Bazelisk
+        run: |
+          sudo curl -L -o /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
+          sudo chmod +x /usr/local/bin/bazel
+
+      - name: Clone workerd
+        run: |
+          git clone https://github.com/cloudflare/workerd
+          cd workerd
+          git config core.hooksPath githooks
+
+      - name: Patch toolchain
+        run: |
+          cd workerd
+          bazel build //src/workerd/server:workerd \
+            --define=TCMALLOC_ADDRESS_BITS=39 \
+            --spawn_strategy=local \
+            --features=-layering_check \
+            --features=-module_maps \
+            --cxxopt='-std=c++23' \
+            -c opt || true
+          find ~/.cache/bazel -name "*.bzl" | xargs grep -l "fmodules-strict-decluse" 2>/dev/null | while read f; do
+            sed -i 's/-fmodules-strict-decluse//g' "$f"
+          done
+
+      - name: Build workerd
+        run: |
+          cd workerd
+          bazel build //src/workerd/server:workerd \
+            --define=TCMALLOC_ADDRESS_BITS=39 \
+            --spawn_strategy=local \
+            --features=-layering_check \
+            --features=-module_maps \
+            --cxxopt='-std=c++23' \
+            -c opt
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: workerd-arm64-pi4
+          path: workerd/bazel-bin/src/workerd/server/workerd
